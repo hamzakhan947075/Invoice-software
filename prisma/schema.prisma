@@ -19,6 +19,7 @@ enum Currency {
   NZD
   AED
   SAR
+  CNY
 }
 
 enum ProductType {
@@ -43,6 +44,45 @@ enum PaymentMethod {
   JAZZCASH
   EASYPAISA
   OTHER
+}
+
+enum RecurringFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum RecurringInvoiceStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  COMPLETED
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
+enum ExpenseCategory {
+  OFFICE_SUPPLIES
+  TRAVEL
+  UTILITIES
+  RENT
+  SOFTWARE
+  MARKETING
+  PROFESSIONAL_SERVICES
+  OTHER
+}
+
+enum StockMovementType {
+  INCREASE
+  DECREASE
 }
 
 // One business per user for the MVP. Multi-business support is a future phase.
@@ -72,10 +112,15 @@ model Business {
   ownerId String @unique
   owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
-  customers Customer[]
-  products  Product[]
-  invoices  Invoice[]
-  payments  Payment[]
+  customers         Customer[]
+  products          Product[]
+  invoices          Invoice[]
+  payments          Payment[]
+  recurringInvoices RecurringInvoice[]
+  quotes            Quote[]
+  creditNotes       CreditNote[]
+  expenses          Expense[]
+  stockMovements    StockMovement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -94,7 +139,9 @@ model Customer {
   businessId String
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  invoices Invoice[]
+  invoices          Invoice[]
+  recurringInvoices RecurringInvoice[]
+  quotes            Quote[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -113,10 +160,20 @@ model Product {
   taxRate     Decimal     @default(0) @db.Decimal(5, 2)
   isActive    Boolean     @default(true)
 
+  // Inventory (Phase 20) — only meaningful for type = PRODUCT. Stock is
+  // adjusted only via explicit "Adjust Stock" actions (logged as
+  // StockMovements), never automatically by invoicing — see README.
+  trackInventory Boolean @default(false)
+  stockQuantity  Decimal @default(0) @db.Decimal(12, 2)
+  reorderLevel   Decimal @default(0) @db.Decimal(12, 2)
+
   businessId String
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  invoiceItems InvoiceItem[]
+  invoiceItems          InvoiceItem[]
+  recurringInvoiceItems RecurringInvoiceItem[]
+  quoteItems            QuoteItem[]
+  stockMovements        StockMovement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -149,8 +206,17 @@ model Invoice {
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
-  items    InvoiceItem[]
-  payments Payment[]
+  // Set when this invoice was auto-generated from a recurring template.
+  // SetNull on delete — deleting the template must never delete invoices it already produced.
+  recurringInvoiceId String?
+  recurringInvoice   RecurringInvoice? @relation(fields: [recurringInvoiceId], references: [id], onDelete: SetNull)
+
+  items       InvoiceItem[]
+  payments    Payment[]
+  creditNotes CreditNote[]
+  // Back-reference for the Quote this invoice was converted from, if any.
+  // No `fields`/`references` here — the FK lives on Quote.convertedInvoiceId.
+  sourceQuote Quote?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -158,6 +224,7 @@ model Invoice {
   @@unique([businessId, invoiceNumber])
   @@index([businessId])
   @@index([customerId])
+  @@index([recurringInvoiceId])
   @@map("invoices")
 }
 
@@ -200,4 +267,183 @@ model Payment {
   @@index([invoiceId])
   @@index([businessId])
   @@map("payments")
+}
+
+// A template that generates real Invoices on a schedule. No money math or
+// tenant logic is duplicated here — generation reuses the same
+// calculateInvoiceTotals()/generateInvoiceNumber() as manual invoice creation.
+model RecurringInvoice {
+  id        String                 @id @default(cuid())
+  frequency RecurringFrequency
+  status    RecurringInvoiceStatus @default(ACTIVE)
+  currency  Currency               @default(PKR)
+
+  startDate       DateTime  @db.Date
+  endDate         DateTime? @db.Date
+  // Date the next invoice is due to be generated. Advanced by `frequency`
+  // each time an invoice is generated, whether by cron or "Generate Now".
+  nextRunDate     DateTime  @db.Date
+  lastGeneratedAt DateTime?
+  // Days after generation's issueDate that the generated invoice's dueDate falls on.
+  dueInDays       Int       @default(14)
+
+  notes String?
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  items             RecurringInvoiceItem[]
+  generatedInvoices Invoice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([customerId])
+  @@index([status, nextRunDate])
+  @@map("recurring_invoices")
+}
+
+model RecurringInvoiceItem {
+  id          String  @id @default(cuid())
+  description String
+  quantity    Decimal @db.Decimal(10, 2)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  taxRate     Decimal @default(0) @db.Decimal(5, 2)
+  discount    Decimal @default(0) @db.Decimal(12, 2)
+
+  recurringInvoiceId String
+  recurringInvoice   RecurringInvoice @relation(fields: [recurringInvoiceId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([recurringInvoiceId])
+  @@map("recurring_invoice_items")
+}
+
+// Phase 17 — a non-binding estimate. Converting one to an invoice creates a
+// real Invoice via the same createInvoiceAction path (recalculated, DRAFT),
+// and stamps convertedInvoiceId so the quote can't be converted twice.
+model Quote {
+  id          String      @id @default(cuid())
+  quoteNumber String
+  issueDate   DateTime    @db.Date
+  expiryDate  DateTime    @db.Date
+  status      QuoteStatus @default(DRAFT)
+  currency    Currency    @default(PKR)
+
+  subtotal Decimal @default(0) @db.Decimal(12, 2)
+  discount Decimal @default(0) @db.Decimal(12, 2)
+  tax      Decimal @default(0) @db.Decimal(12, 2)
+  total    Decimal @default(0) @db.Decimal(12, 2)
+
+  notes String?
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  items QuoteItem[]
+
+  convertedInvoiceId String?  @unique
+  convertedInvoice   Invoice? @relation(fields: [convertedInvoiceId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, quoteNumber])
+  @@index([businessId])
+  @@index([customerId])
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id          String  @id @default(cuid())
+  description String
+  quantity    Decimal @db.Decimal(10, 2)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  taxRate     Decimal @default(0) @db.Decimal(5, 2)
+  discount    Decimal @default(0) @db.Decimal(12, 2)
+  lineTotal   Decimal @db.Decimal(12, 2)
+
+  quoteId String
+  quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([quoteId])
+  @@map("quote_items")
+}
+
+// Phase 18 — issued against an invoice to write off part of its balance
+// (a refund, a billing correction) without ever mutating the invoice's
+// original `total`, which must stay the historical amount actually billed.
+model CreditNote {
+  id               String   @id @default(cuid())
+  creditNoteNumber String
+  issueDate        DateTime @db.Date
+  amount           Decimal  @db.Decimal(12, 2)
+  reason           String
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([businessId, creditNoteNumber])
+  @@index([businessId])
+  @@index([invoiceId])
+  @@map("credit_notes")
+}
+
+// Phase 19 — simple expense tracking, deliberately not tied to invoicing.
+model Expense {
+  id          String          @id @default(cuid())
+  category    ExpenseCategory @default(OTHER)
+  description String
+  vendor      String?
+  amount      Decimal         @db.Decimal(12, 2)
+  expenseDate DateTime        @db.Date
+  notes       String?
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([businessId, expenseDate])
+  @@map("expenses")
+}
+
+// Phase 20 — an audit ledger of manual stock adjustments. Product.stockQuantity
+// is the current balance; every change to it is logged here with a reason.
+model StockMovement {
+  id       String            @id @default(cuid())
+  type     StockMovementType
+  quantity Decimal           @db.Decimal(12, 2)
+  reason   String?
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([businessId])
+  @@map("stock_movements")
 }

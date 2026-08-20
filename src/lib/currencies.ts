@@ -1,4 +1,4 @@
-export const CURRENCIES = ["PKR", "USD", "EUR", "GBP", "AUD", "NZD", "AED", "SAR"] as const;
+export const CURRENCIES = ["PKR", "USD", "EUR", "GBP", "AUD", "NZD", "AED", "SAR", "CNY"] as const;
 
 export type CurrencyCode = (typeof CURRENCIES)[number];
 
@@ -13,4 +13,5 @@ export const CURRENCY_LABELS: Record<CurrencyCode, string> = {
   NZD: "NZD — New Zealand Dollar",
   AED: "AED — UAE Dirham",
   SAR: "SAR — Saudi Riyal",
+  CNY: "CNY — Chinese Yuan",
 };

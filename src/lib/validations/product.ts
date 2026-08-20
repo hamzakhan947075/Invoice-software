@@ -14,6 +14,19 @@ export const productSchema = z.object({
     .min(0, "Tax rate can't be negative.")
     .max(100, "Tax rate can't exceed 100%."),
   isActive: z.coerce.boolean(),
+  trackInventory: z.coerce.boolean(),
+  reorderLevel: z.coerce
+    .number({ error: "Reorder level must be a number." })
+    .nonnegative("Reorder level can't be negative.")
+    .max(999_999_999, "Reorder level is too large.")
+    .optional()
+    .default(0),
+  initialStock: z.coerce
+    .number({ error: "Initial stock must be a number." })
+    .nonnegative("Initial stock can't be negative.")
+    .max(999_999_999, "Initial stock is too large.")
+    .optional()
+    .default(0),
 });
 
 export type ProductInput = z.infer<typeof productSchema>;

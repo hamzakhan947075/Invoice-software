@@ -10,13 +10,20 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
 
-export function DeleteInvoiceDialog({ invoiceId, invoiceNumber }: { invoiceId: string; invoiceNumber: string }) {
-  const [open, setOpen] = useState(false);
+export function DeleteInvoiceDialog({
+  open,
+  onOpenChange,
+  invoiceId,
+  invoiceNumber,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  invoiceId: string;
+  invoiceNumber: string;
+}) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,13 +38,7 @@ export function DeleteInvoiceDialog({ invoiceId, invoiceNumber }: { invoiceId: s
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger asChild>
-        <Button variant="outline">
-          <Trash2 className="h-4 w-4" />
-          Delete
-        </Button>
-      </AlertDialogTrigger>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete {invoiceNumber}?</AlertDialogTitle>

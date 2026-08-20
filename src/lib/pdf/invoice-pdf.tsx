@@ -2,59 +2,112 @@ import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/render
 import { INVOICE_STATUS_LABELS } from "@/lib/invoice-status";
 import type { InvoiceStatus, PaymentMethod } from "@/generated/prisma/enums";
 
+const INK = "#111111";
+const MUTED = "#6b6b6b";
+const RULE = "#e2e2e2";
+const PANEL = "#f6f6f6";
+const DANGER = "#c0362c";
+
+const STATUS_STYLES: Record<InvoiceStatus, { bg: string; color: string; borderColor?: string }> = {
+  DRAFT: { bg: "#eeeeee", color: "#4b4b4b" },
+  SENT: { bg: "#ffffff", color: INK, borderColor: "#c9c9c9" },
+  PARTIALLY_PAID: { bg: "#ffffff", color: INK, borderColor: "#c9c9c9" },
+  PAID: { bg: INK, color: "#ffffff" },
+  OVERDUE: { bg: DANGER, color: "#ffffff" },
+  CANCELLED: { bg: "#eeeeee", color: "#4b4b4b" },
+};
+
 const styles = StyleSheet.create({
-  page: { padding: 40, fontSize: 10, color: "#111111", fontFamily: "Helvetica" },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24 },
-  logo: { width: 56, height: 56, marginBottom: 8, objectFit: "cover" },
-  businessName: { fontSize: 14, fontWeight: 700, marginBottom: 2 },
-  muted: { color: "#666666" },
-  invoiceTitle: { fontSize: 18, fontWeight: 700, textAlign: "right" },
+  page: { padding: 48, fontSize: 10, color: INK, fontFamily: "Helvetica" },
+
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  logo: { width: 48, height: 48, marginBottom: 10, objectFit: "cover" },
+  businessName: { fontSize: 15, fontWeight: 700, marginBottom: 3, letterSpacing: 0.2 },
+  muted: { color: MUTED, fontSize: 9.5, lineHeight: 1.4 },
+
+  docLabel: { fontSize: 9, color: MUTED, letterSpacing: 2, textAlign: "right", marginBottom: 4 },
+  invoiceNumber: { fontSize: 20, fontWeight: 700, textAlign: "right", marginBottom: 8 },
   statusBadge: {
-    marginTop: 6,
     alignSelf: "flex-end",
-    borderWidth: 1,
-    borderColor: "#999999",
-    borderRadius: 4,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
+    borderRadius: 3,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
     fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 0.3,
   },
-  infoRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
-  sectionLabel: { fontSize: 8, color: "#666666", textTransform: "uppercase", marginBottom: 4, letterSpacing: 0.5 },
-  metaGrid: { flexDirection: "row", gap: 12 },
-  metaCol: { alignItems: "flex-end" },
-  table: { marginBottom: 20 },
+
+  headerRule: { borderBottomWidth: 1.5, borderBottomColor: INK, marginTop: 20, marginBottom: 22 },
+
+  infoRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 26 },
+  sectionLabel: { fontSize: 8, color: MUTED, textTransform: "uppercase", marginBottom: 6, letterSpacing: 1.2 },
+  customerName: { fontSize: 12, fontWeight: 700, marginBottom: 3 },
+  metaBlock: { alignItems: "flex-end" },
+  metaLine: { flexDirection: "row", justifyContent: "flex-end", gap: 16, marginBottom: 4 },
+  metaLabel: { color: MUTED, fontSize: 9.5, width: 62, textAlign: "right" },
+  metaValue: { fontSize: 9.5, width: 68, textAlign: "right", fontWeight: 700 },
+
+  table: { marginBottom: 24 },
   tableHeaderRow: {
     flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: "#dddddd",
-    paddingBottom: 6,
-    marginBottom: 4,
+    backgroundColor: INK,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    borderRadius: 2,
   },
   tableRow: {
     flexDirection: "row",
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#eeeeee",
-    paddingVertical: 5,
+    borderBottomWidth: 0.75,
+    borderBottomColor: RULE,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
   },
+  tableRowAlt: { backgroundColor: "#fafafa" },
   colDescription: { flex: 3 },
-  colQty: { flex: 1, textAlign: "right" },
+  colQty: { flex: 0.8, textAlign: "right" },
   colPrice: { flex: 1.2, textAlign: "right" },
-  colTax: { flex: 1, textAlign: "right" },
-  colTotal: { flex: 1.2, textAlign: "right" },
-  headerCell: { fontSize: 9, color: "#666666" },
-  summary: { alignSelf: "flex-end", width: 220, marginBottom: 20 },
-  summaryRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 2 },
-  summaryTotalRow: {
+  colTax: { flex: 0.9, textAlign: "right" },
+  colTotal: { flex: 1.3, textAlign: "right" },
+  headerCell: { fontSize: 8.5, color: "#ffffff", textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 700 },
+  cell: { fontSize: 9.5 },
+
+  summaryWrap: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 24 },
+  summary: { width: 240, backgroundColor: PANEL, borderRadius: 4, padding: 14 },
+  summaryRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 2.5 },
+  summaryLabel: { color: MUTED, fontSize: 9.5 },
+  summaryValue: { fontSize: 9.5 },
+  summaryDivider: { borderBottomWidth: 1, borderBottomColor: "#d6d6d6", marginVertical: 6 },
+  summaryTotalRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 2 },
+  summaryTotalLabel: { fontSize: 10.5, fontWeight: 700 },
+  summaryTotalValue: { fontSize: 10.5, fontWeight: 700 },
+  balanceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#dddddd",
-    paddingTop: 4,
-    marginTop: 2,
-    fontWeight: 700,
+    borderTopColor: "#d6d6d6",
   },
-  notes: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#eeeeee", color: "#444444" },
+  balanceLabel: { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 },
+  balanceValue: { fontSize: 15, fontWeight: 700 },
+
+  notes: { marginBottom: 24, paddingTop: 14, borderTopWidth: 0.75, borderTopColor: RULE },
+  notesLabel: { fontSize: 8, color: MUTED, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 },
+  notesBody: { color: "#333333", fontSize: 9.5, lineHeight: 1.5 },
+
+  footer: {
+    position: "absolute",
+    left: 48,
+    right: 48,
+    bottom: 36,
+    paddingTop: 12,
+    borderTopWidth: 0.75,
+    borderTopColor: RULE,
+    alignItems: "center",
+  },
+  footerThanks: { fontSize: 9.5, fontWeight: 700, marginBottom: 2 },
+  footerMeta: { fontSize: 8, color: MUTED },
 });
 
 export type InvoicePdfData = {
@@ -106,6 +159,9 @@ function money(amount: string, currency: string) {
 }
 
 export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
+  const statusStyle = STATUS_STYLES[data.status];
+  const hasBalance = Number(data.balanceDue) > 0;
+
   return (
     <Document title={data.invoiceNumber}>
       <Page size="A4" style={styles.page}>
@@ -119,27 +175,43 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
             {data.business.address && <Text style={styles.muted}>{data.business.address}</Text>}
           </View>
           <View>
-            <Text style={styles.invoiceTitle}>Invoice {data.invoiceNumber}</Text>
-            <Text style={styles.statusBadge}>{INVOICE_STATUS_LABELS[data.status]}</Text>
+            <Text style={styles.docLabel}>INVOICE</Text>
+            <Text style={styles.invoiceNumber}>{data.invoiceNumber}</Text>
+            <Text
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor: statusStyle.bg,
+                  color: statusStyle.color,
+                  ...(statusStyle.borderColor
+                    ? { borderWidth: 1, borderColor: statusStyle.borderColor }
+                    : {}),
+                },
+              ]}
+            >
+              {INVOICE_STATUS_LABELS[data.status]}
+            </Text>
           </View>
         </View>
+
+        <View style={styles.headerRule} />
 
         <View style={styles.infoRow}>
           <View>
             <Text style={styles.sectionLabel}>Billed to</Text>
-            <Text style={{ fontWeight: 700, marginBottom: 2 }}>{data.customer.name}</Text>
+            <Text style={styles.customerName}>{data.customer.name}</Text>
             {data.customer.email && <Text style={styles.muted}>{data.customer.email}</Text>}
             {data.customer.phone && <Text style={styles.muted}>{data.customer.phone}</Text>}
             {data.customer.address && <Text style={styles.muted}>{data.customer.address}</Text>}
           </View>
-          <View style={styles.metaCol}>
-            <View style={styles.metaGrid}>
-              <Text style={styles.muted}>Issue Date</Text>
-              <Text>{data.issueDate}</Text>
+          <View style={styles.metaBlock}>
+            <View style={styles.metaLine}>
+              <Text style={styles.metaLabel}>Issue Date</Text>
+              <Text style={styles.metaValue}>{data.issueDate}</Text>
             </View>
-            <View style={styles.metaGrid}>
-              <Text style={styles.muted}>Due Date</Text>
-              <Text>{data.dueDate}</Text>
+            <View style={styles.metaLine}>
+              <Text style={styles.metaLabel}>Due Date</Text>
+              <Text style={styles.metaValue}>{data.dueDate}</Text>
             </View>
           </View>
         </View>
@@ -153,49 +225,64 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
             <Text style={[styles.colTotal, styles.headerCell]}>Total</Text>
           </View>
           {data.items.map((item, index) => (
-            <View key={index} style={styles.tableRow}>
-              <Text style={styles.colDescription}>{item.description}</Text>
-              <Text style={styles.colQty}>{item.quantity}</Text>
-              <Text style={styles.colPrice}>{money(item.unitPrice, data.currency)}</Text>
-              <Text style={styles.colTax}>{Number(item.taxRate).toFixed(2)}%</Text>
-              <Text style={styles.colTotal}>{money(item.lineTotal, data.currency)}</Text>
+            <View key={index} style={[styles.tableRow, ...(index % 2 === 1 ? [styles.tableRowAlt] : [])]}>
+              <Text style={[styles.colDescription, styles.cell]}>{item.description}</Text>
+              <Text style={[styles.colQty, styles.cell]}>{item.quantity}</Text>
+              <Text style={[styles.colPrice, styles.cell]}>{money(item.unitPrice, data.currency)}</Text>
+              <Text style={[styles.colTax, styles.cell]}>{Number(item.taxRate).toFixed(2)}%</Text>
+              <Text style={[styles.colTotal, styles.cell]}>{money(item.lineTotal, data.currency)}</Text>
             </View>
           ))}
         </View>
 
-        <View style={styles.summary}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.muted}>Subtotal</Text>
-            <Text>{money(data.subtotal, data.currency)}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.muted}>Discount</Text>
-            <Text>{money(data.discount, data.currency)}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.muted}>Tax</Text>
-            <Text>{money(data.tax, data.currency)}</Text>
-          </View>
-          <View style={styles.summaryTotalRow}>
-            <Text>Total</Text>
-            <Text>{money(data.total, data.currency)}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.muted}>Paid</Text>
-            <Text>{money(data.amountPaid, data.currency)}</Text>
-          </View>
-          <View style={styles.summaryTotalRow}>
-            <Text>Balance Due</Text>
-            <Text>{money(data.balanceDue, data.currency)}</Text>
+        <View style={styles.summaryWrap}>
+          <View style={styles.summary}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Subtotal</Text>
+              <Text style={styles.summaryValue}>{money(data.subtotal, data.currency)}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Discount</Text>
+              <Text style={styles.summaryValue}>{money(data.discount, data.currency)}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Tax</Text>
+              <Text style={styles.summaryValue}>{money(data.tax, data.currency)}</Text>
+            </View>
+
+            <View style={styles.summaryDivider} />
+
+            <View style={styles.summaryTotalRow}>
+              <Text style={styles.summaryTotalLabel}>Total</Text>
+              <Text style={styles.summaryTotalValue}>{money(data.total, data.currency)}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Paid</Text>
+              <Text style={styles.summaryValue}>{money(data.amountPaid, data.currency)}</Text>
+            </View>
+
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceLabel}>Balance Due</Text>
+              <Text style={[styles.balanceValue, hasBalance ? { color: DANGER } : {}]}>
+                {money(data.balanceDue, data.currency)}
+              </Text>
+            </View>
           </View>
         </View>
 
         {data.notes && (
           <View style={styles.notes}>
-            <Text style={{ fontWeight: 700, marginBottom: 2, color: "#111111" }}>Notes</Text>
-            <Text>{data.notes}</Text>
+            <Text style={styles.notesLabel}>Notes</Text>
+            <Text style={styles.notesBody}>{data.notes}</Text>
           </View>
         )}
+
+        <View style={styles.footer}>
+          <Text style={styles.footerThanks}>Thank you for your business.</Text>
+          <Text style={styles.footerMeta}>
+            {data.business.name} · Invoice {data.invoiceNumber}
+          </Text>
+        </View>
       </Page>
     </Document>
   );

@@ -43,12 +43,23 @@ function startOfToday(): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-/** Prisma `where` fragment matching the same overdue definition, for list filtering. */
+/**
+ * Prisma `where` fragment matching "effectively overdue", for list filtering
+ * and dashboard aggregates. OVERDUE can now be a manually-set stored status
+ * (via markInvoiceOverdueAction) as well as the automatic due-date derivation
+ * below — this has to match both, or a manually-flagged invoice would vanish
+ * from the Overdue filter and the dashboard's Overdue total.
+ */
 export function overdueWhereClause() {
   return {
-    status: { in: ["SENT", "PARTIALLY_PAID"] as InvoiceStatus[] },
-    dueDate: { lt: startOfToday() },
-    balanceDue: { gt: 0 },
+    OR: [
+      { status: "OVERDUE" as InvoiceStatus },
+      {
+        status: { in: ["SENT", "PARTIALLY_PAID"] as InvoiceStatus[] },
+        dueDate: { lt: startOfToday() },
+        balanceDue: { gt: 0 },
+      },
+    ],
   };
 }
 

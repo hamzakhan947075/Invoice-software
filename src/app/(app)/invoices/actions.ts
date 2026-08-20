@@ -5,23 +5,13 @@ import { redirect } from "next/navigation";
 import { requireCurrentBusiness } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 import { invoiceSchema, type InvoiceInput } from "@/lib/validations/invoice";
-import { calculateInvoiceTotals, calculateLineItem } from "@/lib/invoice-calculations";
+import { calculateInvoiceTotals, calculateLineItem, applyPayment } from "@/lib/invoice-calculations";
 import { generateInvoiceNumber } from "@/lib/invoice-number";
+import { resolveOwnedProductIds } from "@/lib/resolve-owned-products";
 
 export type InvoiceActionResult = { error?: string; invoiceId?: string };
 
 class InvoiceActionError extends Error {}
-
-async function resolveItemProductIds(businessId: string, items: InvoiceInput["items"]) {
-  const productIds = [...new Set(items.map((item) => item.productId).filter((id): id is string => Boolean(id)))];
-  if (productIds.length === 0) return new Set<string>();
-
-  const ownedProducts = await prisma.product.findMany({
-    where: { id: { in: productIds }, businessId },
-    select: { id: true },
-  });
-  return new Set(ownedProducts.map((p) => p.id));
-}
 
 export async function createInvoiceAction(input: InvoiceInput): Promise<InvoiceActionResult> {
   const business = await requireCurrentBusiness();
@@ -41,7 +31,7 @@ export async function createInvoiceAction(input: InvoiceInput): Promise<InvoiceA
   }
 
   // Only trust productId references that actually belong to this business.
-  const ownedProductIds = await resolveItemProductIds(business.id, data.items);
+  const ownedProductIds = await resolveOwnedProductIds(business.id, data.items);
 
   const totals = calculateInvoiceTotals(data.items);
   const issueDate = new Date(data.issueDate);
@@ -118,7 +108,7 @@ export async function updateInvoiceAction(
     return { error: "Select a valid customer." };
   }
 
-  const ownedProductIds = await resolveItemProductIds(business.id, data.items);
+  const ownedProductIds = await resolveOwnedProductIds(business.id, data.items);
   const totals = calculateInvoiceTotals(data.items);
 
   try {
@@ -216,7 +206,7 @@ export async function cancelInvoiceAction(invoiceId: string): Promise<{ error?: 
     where: {
       id: invoiceId,
       businessId: business.id,
-      status: { in: ["DRAFT", "SENT", "PARTIALLY_PAID"] },
+      status: { in: ["DRAFT", "SENT", "PARTIALLY_PAID", "OVERDUE"] },
     },
     data: { status: "CANCELLED" },
   });
@@ -227,6 +217,102 @@ export async function cancelInvoiceAction(invoiceId: string): Promise<{ error?: 
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath("/");
+  return {};
+}
+
+/**
+ * Manually flags an invoice OVERDUE ahead of (or independent of) the automatic
+ * due-date derivation in getEffectiveInvoiceStatus — once stored, that function's
+ * fallback returns it as-is, so a manual OVERDUE sticks until cancelled or paid,
+ * regardless of due date.
+ */
+export async function markInvoiceOverdueAction(invoiceId: string): Promise<{ error?: string }> {
+  const business = await requireCurrentBusiness();
+
+  const { count } = await prisma.invoice.updateMany({
+    where: {
+      id: invoiceId,
+      businessId: business.id,
+      status: { in: ["SENT", "PARTIALLY_PAID"] },
+    },
+    data: { status: "OVERDUE" },
+  });
+
+  if (count === 0) {
+    return { error: "Only a sent or partially-paid invoice can be marked overdue." };
+  }
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath("/");
+  return {};
+}
+
+class MarkPaidActionError extends Error {}
+
+/**
+ * Marks an invoice fully paid by recording a real payment for the entire
+ * remaining balance — money math (amountPaid/balanceDue) always stays
+ * consistent with status, the same as using Record Payment for the full
+ * amount. Uses the same read-then-guarded-write transaction pattern as
+ * recordPaymentAction to close the same concurrent-payment race.
+ */
+export async function markInvoicePaidAction(invoiceId: string): Promise<{ error?: string }> {
+  const business = await requireCurrentBusiness();
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findFirst({
+        where: { id: invoiceId, businessId: business.id },
+        select: { id: true, status: true, total: true, amountPaid: true, balanceDue: true },
+      });
+      if (!invoice) throw new MarkPaidActionError("Invoice not found.");
+      if (!["SENT", "PARTIALLY_PAID", "OVERDUE"].includes(invoice.status)) {
+        throw new MarkPaidActionError("This invoice can't be marked paid.");
+      }
+      if (invoice.balanceDue.lessThanOrEqualTo(0)) {
+        throw new MarkPaidActionError("This invoice has no remaining balance.");
+      }
+
+      const paymentAmount = invoice.balanceDue;
+      const progress = applyPayment(invoice.total, invoice.amountPaid, paymentAmount);
+
+      await tx.payment.create({
+        data: {
+          businessId: business.id,
+          invoiceId: invoice.id,
+          amount: paymentAmount,
+          paymentDate: new Date(),
+          paymentMethod: "OTHER",
+          notes: 'Recorded via "Mark as Paid."',
+        },
+      });
+
+      const { count } = await tx.invoice.updateMany({
+        where: { id: invoice.id, businessId: business.id, amountPaid: invoice.amountPaid },
+        data: {
+          amountPaid: progress.amountPaid,
+          balanceDue: progress.balanceDue,
+          status: "PAID",
+        },
+      });
+      if (count === 0) {
+        throw new MarkPaidActionError(
+          "This invoice's balance just changed elsewhere. Please review and try again."
+        );
+      }
+    });
+  } catch (error) {
+    if (error instanceof MarkPaidActionError) {
+      return { error: error.message };
+    }
+    throw error;
+  }
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath("/payments");
   revalidatePath("/");
   return {};
 }

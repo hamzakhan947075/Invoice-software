@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Eye, FileText, Pencil } from "lucide-react";
+import { FileText } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -19,13 +20,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/shared/search-input";
 import { EmptyState } from "@/components/shared/empty-state";
 import { formatMoney } from "@/lib/format";
 import type { CurrencyCode } from "@/lib/currencies";
 import { STATUS_FILTER_OPTIONS } from "@/lib/invoice-status";
-import { InvoiceStatusBadge } from "@/components/invoices/invoice-status-badge";
+import { InvoiceStatusDropdown } from "@/components/invoices/invoice-status-dropdown";
+import { InvoiceRowActions } from "@/components/invoices/invoice-row-actions";
+import { DeleteInvoiceDialog } from "@/components/invoices/delete-invoice-dialog";
+import { CancelInvoiceDialog } from "@/components/invoices/cancel-invoice-dialog";
 import type { InvoiceStatus } from "@/generated/prisma/enums";
 
 export type InvoiceRow = {
@@ -52,6 +55,8 @@ export function InvoicesView({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [cancelling, setCancelling] = useState<InvoiceRow | null>(null);
+  const [deleting, setDeleting] = useState<InvoiceRow | null>(null);
 
   function updateParam(key: string, value: string) {
     const params = new URLSearchParams(window.location.search);
@@ -157,32 +162,20 @@ export function InvoicesView({
                   </TableCell>
                   <TableCell className="text-right">{formatMoney(invoice.total, currency)}</TableCell>
                   <TableCell>
-                    <InvoiceStatusBadge status={invoice.status} />
+                    <InvoiceStatusDropdown
+                      invoiceId={invoice.id}
+                      status={invoice.status}
+                      onRequestCancel={() => setCancelling(invoice)}
+                    />
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon-sm" asChild>
-                        <Link href={`/invoices/${invoice.id}`} aria-label="View invoice">
-                          <Eye className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                      <Button variant="ghost" size="icon-sm" asChild>
-                        <a
-                          href={`/invoices/${invoice.id}/pdf?disposition=inline`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="View PDF"
-                        >
-                          <FileText className="h-4 w-4" />
-                        </a>
-                      </Button>
-                      {invoice.status === "DRAFT" && (
-                        <Button variant="ghost" size="icon-sm" asChild>
-                          <Link href={`/invoices/${invoice.id}/edit`} aria-label="Edit invoice">
-                            <Pencil className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                      )}
+                    <div className="flex items-center justify-end">
+                      <InvoiceRowActions
+                        invoiceId={invoice.id}
+                        invoiceNumber={invoice.invoiceNumber}
+                        status={invoice.status}
+                        onRequestDelete={() => setDeleting(invoice)}
+                      />
                     </div>
                   </TableCell>
                 </TableRow>
@@ -191,6 +184,25 @@ export function InvoicesView({
           </TableBody>
         </Table>
       </div>
+
+      {deleting && (
+        <DeleteInvoiceDialog
+          key={deleting.id}
+          open={deleting !== null}
+          onOpenChange={(open) => !open && setDeleting(null)}
+          invoiceId={deleting.id}
+          invoiceNumber={deleting.invoiceNumber}
+        />
+      )}
+      {cancelling && (
+        <CancelInvoiceDialog
+          key={cancelling.id}
+          open={cancelling !== null}
+          onOpenChange={(open) => !open && setCancelling(null)}
+          invoiceId={cancelling.id}
+          invoiceNumber={cancelling.invoiceNumber}
+        />
+      )}
     </div>
   );
 }

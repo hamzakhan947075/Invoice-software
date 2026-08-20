@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Repeat } from "lucide-react";
 import { requireCurrentBusiness } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,6 +25,7 @@ export default async function InvoiceDetailPage({
       customer: true,
       items: true,
       payments: { orderBy: { paymentDate: "desc" } },
+      creditNotes: { orderBy: { issueDate: "desc" } },
     },
   });
   if (!invoice) notFound();
@@ -35,13 +36,24 @@ export default async function InvoiceDetailPage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4 print:hidden">
-        <Link
-          href="/invoices"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to invoices
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/invoices"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to invoices
+          </Link>
+          {invoice.recurringInvoiceId && (
+            <Link
+              href={`/recurring-invoices/${invoice.recurringInvoiceId}`}
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <Repeat className="h-4 w-4" />
+              Generated from a recurring schedule
+            </Link>
+          )}
+        </div>
         <InvoiceActions
           invoiceId={invoice.id}
           invoiceNumber={invoice.invoiceNumber}
@@ -182,6 +194,25 @@ export default async function InvoiceDetailPage({
                   </span>
                 </div>
                 <span className="font-medium">{formatMoney(payment.amount.toFixed(2), currency)}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {invoice.creditNotes.length > 0 && (
+        <Card className="print:hidden">
+          <CardContent className="flex flex-col divide-y divide-border p-0">
+            <div className="p-4 pb-2 font-medium">Credit Notes</div>
+            {invoice.creditNotes.map((creditNote) => (
+              <div key={creditNote.id} className="flex items-center justify-between p-4 text-sm">
+                <div className="flex flex-col">
+                  <span>{creditNote.creditNoteNumber}</span>
+                  <span className="text-muted-foreground">
+                    {creditNote.issueDate.toLocaleDateString()} · {creditNote.reason}
+                  </span>
+                </div>
+                <span className="font-medium">{formatMoney(creditNote.amount.toFixed(2), currency)}</span>
               </div>
             ))}
           </CardContent>

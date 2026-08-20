@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { Boxes, Package, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,6 +18,7 @@ import { formatMoney } from "@/lib/format";
 import type { CurrencyCode } from "@/lib/currencies";
 import { ProductFormDialog, type ProductRecord } from "@/components/products/product-form-dialog";
 import { DeleteProductDialog } from "@/components/products/delete-product-dialog";
+import { AdjustStockDialog } from "@/components/products/adjust-stock-dialog";
 
 export function ProductsView({
   products,
@@ -31,6 +32,7 @@ export function ProductsView({
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<ProductRecord | null>(null);
   const [deleting, setDeleting] = useState<ProductRecord | null>(null);
+  const [adjustingStock, setAdjustingStock] = useState<ProductRecord | null>(null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -52,13 +54,14 @@ export function ProductsView({
               <TableHead className="text-right">Price</TableHead>
               <TableHead className="text-right">Tax Rate</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Stock</TableHead>
               <TableHead className="w-0">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {products.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="p-0">
+                <TableCell colSpan={8} className="p-0">
                   <EmptyState
                     icon={Package}
                     title={searchQuery ? "No items match your search" : "No products or services yet"}
@@ -90,8 +93,36 @@ export function ProductsView({
                       {product.isActive ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>
+                  <TableCell className="text-right">
+                    {product.trackInventory ? (
+                      <span
+                        className={
+                          Number(product.stockQuantity) <= Number(product.reorderLevel)
+                            ? "inline-flex items-center gap-1 font-medium text-destructive"
+                            : ""
+                        }
+                      >
+                        {Number(product.stockQuantity) <= Number(product.reorderLevel) && (
+                          <TriangleAlert className="h-3.5 w-3.5" />
+                        )}
+                        {Number(product.stockQuantity).toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
+                      {product.trackInventory && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Adjust stock"
+                          onClick={() => setAdjustingStock(product)}
+                        >
+                          <Boxes className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon-sm"
@@ -131,6 +162,16 @@ export function ProductsView({
           onOpenChange={(open) => !open && setDeleting(null)}
           productId={deleting.id}
           productName={deleting.name}
+        />
+      )}
+      {adjustingStock && (
+        <AdjustStockDialog
+          key={adjustingStock.id}
+          open={adjustingStock !== null}
+          onOpenChange={(open) => !open && setAdjustingStock(null)}
+          productId={adjustingStock.id}
+          productName={adjustingStock.name}
+          currentStock={Number(adjustingStock.stockQuantity).toFixed(2)}
         />
       )}
     </div>

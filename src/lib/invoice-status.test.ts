@@ -81,15 +81,14 @@ describe("invoiceStatusWhere", () => {
     expect(invoiceStatusWhere("PAID")).toEqual({ status: "PAID" });
   });
 
-  it("builds the derived-overdue filter for OVERDUE", () => {
+  it("builds a filter for OVERDUE matching both a manually-set status and the due-date derivation", () => {
     const where = invoiceStatusWhere("OVERDUE") as {
-      status: { in: string[] };
-      dueDate: { lt: Date };
-      balanceDue: { gt: number };
+      OR: [{ status: string }, { status: { in: string[] }; dueDate: { lt: Date }; balanceDue: { gt: number } }];
     };
-    expect(where.status.in).toEqual(["SENT", "PARTIALLY_PAID"]);
-    expect(where.balanceDue).toEqual({ gt: 0 });
-    expect(where.dueDate.lt).toBeInstanceOf(Date);
+    expect(where.OR[0]).toEqual({ status: "OVERDUE" });
+    expect(where.OR[1].status.in).toEqual(["SENT", "PARTIALLY_PAID"]);
+    expect(where.OR[1].balanceDue).toEqual({ gt: 0 });
+    expect(where.OR[1].dueDate.lt).toBeInstanceOf(Date);
   });
 
   it("excludes overdue invoices when filtering explicitly for SENT", () => {

@@ -6,6 +6,8 @@
   Create professional invoices and track their payments — with minimum complexity.
 </p>
 
+<p align="center">MVP complete, plus recurring invoices, quotes, credit notes, expense tracking, and inventory (Phases 16–20).</p>
+
 <p align="center">
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-black?logo=next.js" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-blue?logo=typescript" />
@@ -27,17 +29,26 @@
 | --- | --- |
 | ![Invoice detail](docs/screenshots/invoice-detail.png) | ![Customers](docs/screenshots/customers-list.png) |
 
+| Recurring invoices |
+| --- |
+| ![Recurring invoices](docs/screenshots/recurring-invoices.png) |
+
 ## Features
 
 - **Authentication** — email/password with a signed session cookie; self-service business sign-up
-- **Business profile** — name, logo, contact details, and a default currency across 8 supported currencies
+- **Business profile** — name, logo, contact details, and a default currency across 9 supported currencies (including CNY)
 - **Customers** — CRUD, search, and a detail page with invoice history, payment history, and a downloadable PDF statement
-- **Products & services** — catalog with pricing and tax rate, selectable when building an invoice
+- **Products & services** — catalog with pricing, tax rate, and optional inventory tracking, selectable when building an invoice or quote
 - **Invoices** — create/edit/delete drafts, a dynamic line-item builder with live totals, server-authoritative recalculation, status lifecycle (Draft → Sent → Partially Paid/Paid, or Cancelled), and automatically-derived Overdue status
-- **PDF generation** — a professional invoice PDF and a per-customer payment statement PDF, both viewable inline or downloadable, generated server-side
+- **Quotes/estimates** — the same line-item builder as invoices, a status lifecycle (Draft → Sent → Accepted/Rejected, with an auto-derived Expired), and one-click conversion of an accepted quote into a real, editable draft invoice
+- **PDF generation** — professional invoice, quote, and per-customer payment statement PDFs, all viewable inline or downloadable, generated server-side
 - **Payments** — record payments against an invoice with overpayment protection, a full payments ledger, and a per-customer breakdown
-- **Dashboard** — total invoiced/paid/outstanding/overdue at a glance, recent invoices, and a monthly revenue chart
-- **Search & filtering** — invoices by number, customer, status, and date range
+- **Credit notes** — issue a credit note against a sent/partially-paid invoice to reduce its balance due (e.g. for a return or billing correction), with a full audit trail and a business-wide list
+- **Expense tracking** — categorized expense records (rent, software, travel, etc.) with search/category filtering and a dashboard total
+- **Inventory** — optional per-product stock tracking with a reorder-level threshold, low-stock indicator, and every adjustment recorded as an auditable stock movement — stock only ever changes through an explicit adjustment, never automatically from invoicing
+- **Dashboard** — total invoiced/paid/outstanding/overdue/expenses at a glance, recent invoices, and a monthly revenue chart
+- **Search & filtering** — invoices, quotes, credit notes, and expenses by number, customer, status, category, or date range
+- **Recurring invoices** — a schedule (weekly/monthly/quarterly/yearly) that auto-generates a real, fully-priced invoice each cycle, with pause/resume/cancel, a manual "Generate Now," and an optional daily cron trigger
 - **Tenant isolation** — every business's data is fully isolated from every other business's, enforced at the query layer and covered by an integration test
 
 ## Tech Stack
@@ -77,6 +88,7 @@ cp .env.example .env
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql://user:pass@localhost:5432/invoiceflow?schema=public` |
 | `AUTH_SECRET` | Random secret used to sign session cookies. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
+| `CRON_SECRET` | Optional. Authorizes calls to `/api/cron/recurring-invoices` (generate the same way). Only needed if you use recurring invoices with an automated scheduler — see [Recurring invoices](#recurring-invoices) below. |
 
 > Don't have a local Postgres server? Prisma can run one for you during development: `npx prisma dev --detach`, then use the `DATABASE_URL` it prints.
 
@@ -88,7 +100,7 @@ npx prisma migrate dev
 npx prisma db seed
 ```
 
-This creates the schema (`User`, `Business`, `Customer`, `Product`, `Invoice`, `InvoiceItem`, `Payment`) and seeds one demo business with customers, products, and invoices in different states (paid, partially paid, overdue).
+This creates the schema (`User`, `Business`, `Customer`, `Product`, `Invoice`, `InvoiceItem`, `Payment`, `Quote`, `QuoteItem`, `CreditNote`, `Expense`, `StockMovement`) and seeds one demo business with customers, products, and invoices in different states (paid, partially paid, overdue).
 
 Seeded login:
 
@@ -114,6 +126,15 @@ npm test
 
 Runs the Vitest suite: pure unit tests for invoice/payment calculations and status logic, plus an integration test that proves the tenant-isolation query pattern (`findFirst({ id, businessId })`) actually blocks cross-business access, against the database configured by `DATABASE_URL`.
 
+### Recurring invoices
+
+Recurring invoices generate on their own once you either:
+
+- Click **Generate Now** on a schedule's detail page (works with no extra setup), or
+- Set `CRON_SECRET` and call `GET /api/cron/recurring-invoices` with `Authorization: Bearer $CRON_SECRET` once a day, from any external scheduler.
+
+On Vercel, the included `vercel.json` already schedules this daily — Vercel automatically sends that header when `CRON_SECRET` is set as a project environment variable, so no extra wiring is needed.
+
 ### Production
 
 ```bash
@@ -132,10 +153,13 @@ src/
       customers/             #   list, [id] detail (invoice + payment history, statement PDF)
       products/              #   catalog CRUD
       invoices/               #   list w/ search+filters, new, [id] view, [id]/edit, [id]/pdf (route handler)
+      quotes/                  #   list, new, [id] view, [id]/edit, [id]/pdf (route handler)
+      expenses/                 #   list w/ search+category filter, dialog-based CRUD
+      credit-notes/               #   business-wide read-only list (issued from an invoice's detail page)
       payments/                #   all-payments list
       settings/                 #   business profile + logo upload
   components/
-    auth/, customers/, products/, invoices/, settings/, dashboard/   # Feature-specific forms/dialogs/views
+    auth/, customers/, products/, invoices/, quotes/, expenses/, settings/, dashboard/   # Feature-specific forms/dialogs/views
     shared/                # SearchInput, EmptyState, TableSkeleton, PageSkeleton
     layout/                # App shell: sidebar, header, mobile nav
     ui/                    # shadcn/ui primitives
@@ -146,6 +170,11 @@ src/
     invoice-calculations.ts # The one place line-item/invoice/payment money math happens
     invoice-status.ts       # "Overdue" derivation + status-filter query builder
     invoice-number.ts        # Sequential INV-{year}-{seq} generator
+    quote-number.ts           # Sequential QUO-{year}-{seq} generator
+    quote-status.ts            # "Expired" derivation, mirroring invoice-status.ts
+    credit-note-number.ts       # Sequential CN-{year}-{seq} generator
+    recurring-invoice-schedule.ts    # Next-run-date math for recurring invoices
+    recurring-invoice-generator.ts   # Turns one due template into a real Invoice
     *.test.ts                # Vitest unit/integration tests, colocated with the code they test
 prisma/
   schema.prisma            # Database schema
@@ -181,6 +210,29 @@ prisma/
 </details>
 
 <details>
+<summary><b>Recurring invoices (click to expand)</b></summary>
+
+- A `RecurringInvoice` template stores its own line items, a `frequency`, a `nextRunDate`, and an optional `endDate` — it never duplicates money math: generation reuses the exact same `calculateInvoiceTotals()` and `generateInvoiceNumber()` that manual invoice creation uses.
+- Generation and schedule-advancement happen in one transaction (`generateInvoiceFromTemplate`), and always advance from the *previous scheduled date*, not from "today" — so triggering a schedule early with "Generate Now" never shifts the rest of its future run dates.
+- Auto-generated invoices are created as `SENT`, not `DRAFT` — the point of automation is not having to manually send each one — and carry a `recurringInvoiceId` back-reference, surfaced as a link on the generated invoice's detail page.
+- `generateDueInvoices()` (used by the cron route) is deliberately **not** scoped to one business — a scheduled sweep has to cover every tenant — while the per-business "Generate Now" Server Action checks template ownership *before* handing off to the same shared generator, so the unscoped function is never reachable with an unauthorized id.
+- The cron endpoint (`/api/cron/recurring-invoices`) authenticates with a shared secret (`Authorization: Bearer $CRON_SECRET`) rather than a session, since it's called by an external scheduler, not a logged-in user. Deleting a template keeps every invoice it already generated (`onDelete: SetNull` on the back-reference) — only the schedule itself is removed.
+
+</details>
+
+<details>
+<summary><b>Quotes, credit notes, expenses & inventory (click to expand)</b></summary>
+
+- **Quotes** reuse the exact same line-item builder and `calculateInvoiceTotals()` math as invoices — a `Quote`/`QuoteItem` pair mirrors `Invoice`/`InvoiceItem`. Status only ever moves forward (`DRAFT → SENT → ACCEPTED/REJECTED`); `EXPIRED` is derived at read time from `expiryDate < today`, never stored, the same pattern as an invoice's `OVERDUE`.
+- **Converting a quote to an invoice** creates a real, independent `DRAFT` invoice (not a reference/alias) and stamps `Quote.convertedInvoiceId`, so the invoice can be edited afterward without touching the quote. The action re-derives the quote's *effective* status inside the same transaction before converting — an already-expired quote can't be converted just because the stale page in the browser still shows "Accepted."
+- **Credit notes** reduce an invoice's `balanceDue` directly (not its `total`, which stays the historical record of what was billed) and flip the invoice to `PAID` if the credit fully offsets the remaining balance. Issuing one uses the identical read-then-guarded-write transaction pattern as recording a payment: the balance is re-read and the write is conditioned on it being unchanged, closing the same race window a concurrent payment or second credit note could otherwise open.
+- **Expenses** are intentionally simple — categorized CRUD records with no downstream effect on invoices or reports beyond their own list and a dashboard total. There was no requirement to reconcile them against revenue, so no such logic exists.
+- **Inventory is manual by design**: `Product.stockQuantity` never changes as a side effect of creating, sending, or paying an invoice. The only writes to it go through `adjustStockAction`, and every adjustment — increase or decrease, including a new product's initial stock — creates a `StockMovement` audit row in the same transaction. This keeps "why did stock change" always answerable, and avoids the much larger design question of what should happen to stock when a draft invoice is edited or cancelled after having already decremented it.
+- **CNY (Chinese Yuan)** was added as a 9th supported currency alongside the original 8 — purely a `Currency` enum value and a label; no currency-specific formatting or conversion logic exists anywhere (this app never converts between currencies, it only tags each invoice/quote with one).
+
+</details>
+
+<details>
 <summary><b>Testing & security hardening (click to expand)</b></summary>
 
 A full tenant-isolation audit (every database call touching business-owned data) found no exploitable cross-business data leak, but surfaced several real hardening items — all fixed:
@@ -198,10 +250,12 @@ A full tenant-isolation audit (every database call touching business-owned data)
 
 ## Roadmap
 
-The MVP intentionally excludes the following, planned for later phases: recurring invoices, quotes/estimates, credit notes, expense tracking, inventory, a customer-facing portal, online payment gateways, email automation, WhatsApp sharing, advanced reports, role management, multi-business accounts, and advanced tax/accounting features.
+Recurring invoices, quotes/estimates, credit notes, expense tracking, and inventory are all implemented (see Features above). Still intentionally excluded, planned for later phases: a customer-facing portal, online payment gateways, email automation, WhatsApp sharing, advanced reports, role management, multi-business accounts, and advanced tax/accounting features.
 
 ## Known Limitations
 
+- **`prisma migrate dev`'s shadow database** can fail against certain local Postgres setups where the main database is unconventionally named (e.g. `npx prisma dev`'s instance, which connects to a database literally called `template1` — Postgres won't let `CREATE DATABASE ... TEMPLATE template1` run against it while connections are open, and this project hit that directly while adding recurring invoices). Set `SHADOW_DATABASE_URL` to a separate, empty database on the same server to work around it; a normal Postgres server (RDS, Supabase, a plain `createdb`) never needs this.
+- **`npx prisma dev`'s local instance occasionally drops a connection mid-query** (`P1017: Server has closed the connection`), surfacing as an intermittent 500 on an otherwise-correct page or a flaky integration test run. It's been observed on ordinary reads with no unusual concurrency involved and self-resolves on retry or a dev-server restart; a normal Postgres server has not shown this. Don't chase it as an application bug — retry before assuming a regression.
 - **Rate limiting** on login is in-memory and per-process — fine for a single instance, but a multi-instance deployment should move it to a shared store (e.g. Redis) and extend it to registration.
 - **Uploaded logos** are written to `public/uploads/` at runtime, which does not persist across redeploys on serverless targets. A production deployment should use an object store instead.
 - **Sessions cannot be revoked early** — the cookie is a stateless signed token valid for its full 7-day lifetime; logout only clears the client's copy.

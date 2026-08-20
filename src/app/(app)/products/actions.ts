@@ -16,6 +16,10 @@ function parseProductForm(formData: FormData) {
     price: formData.get("price"),
     taxRate: formData.get("taxRate"),
     isActive: formData.get("isActive") === "on" || formData.get("isActive") === "true",
+    trackInventory:
+      formData.get("trackInventory") === "on" || formData.get("trackInventory") === "true",
+    reorderLevel: formData.get("reorderLevel") || "0",
+    initialStock: formData.get("initialStock") || "0",
   });
 }
 
@@ -29,17 +33,36 @@ export async function createProductAction(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
-  await prisma.product.create({
-    data: {
-      businessId: business.id,
-      name: parsed.data.name,
-      sku: parsed.data.sku || null,
-      description: parsed.data.description || null,
-      type: parsed.data.type,
-      price: parsed.data.price.toFixed(2),
-      taxRate: parsed.data.taxRate.toFixed(2),
-      isActive: parsed.data.isActive,
-    },
+  const initialStock = parsed.data.trackInventory ? parsed.data.initialStock : 0;
+
+  await prisma.$transaction(async (tx) => {
+    const product = await tx.product.create({
+      data: {
+        businessId: business.id,
+        name: parsed.data.name,
+        sku: parsed.data.sku || null,
+        description: parsed.data.description || null,
+        type: parsed.data.type,
+        price: parsed.data.price.toFixed(2),
+        taxRate: parsed.data.taxRate.toFixed(2),
+        isActive: parsed.data.isActive,
+        trackInventory: parsed.data.trackInventory,
+        reorderLevel: parsed.data.reorderLevel.toFixed(2),
+        stockQuantity: initialStock.toFixed(2),
+      },
+    });
+
+    if (initialStock > 0) {
+      await tx.stockMovement.create({
+        data: {
+          businessId: business.id,
+          productId: product.id,
+          type: "INCREASE",
+          quantity: initialStock.toFixed(2),
+          reason: "Initial stock",
+        },
+      });
+    }
   });
 
   revalidatePath("/products");
@@ -61,6 +84,8 @@ export async function updateProductAction(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
+  // stockQuantity is intentionally not editable here — it only changes via
+  // adjustStockAction, which keeps every change backed by a StockMovement record.
   const { count } = await prisma.product.updateMany({
     where: { id, businessId: business.id },
     data: {
@@ -71,6 +96,8 @@ export async function updateProductAction(
       price: parsed.data.price.toFixed(2),
       taxRate: parsed.data.taxRate.toFixed(2),
       isActive: parsed.data.isActive,
+      trackInventory: parsed.data.trackInventory,
+      reorderLevel: parsed.data.reorderLevel.toFixed(2),
     },
   });
 

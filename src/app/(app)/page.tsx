@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileClock, FileText, PiggyBank, TriangleAlert } from "lucide-react";
+import { FileClock, FileText, PiggyBank, Receipt, TriangleAlert } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireCurrentBusiness } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
@@ -30,7 +30,7 @@ export default async function DashboardPage() {
   sixMonthsAgo.setDate(1);
   sixMonthsAgo.setHours(0, 0, 0, 0);
 
-  const [totals, overdueTotal, recentInvoices, recentPayments] = await Promise.all([
+  const [totals, overdueTotal, expenseTotal, recentInvoices, recentPayments] = await Promise.all([
     prisma.invoice.aggregate({
       where: activeInvoiceFilter,
       _sum: { total: true, amountPaid: true, balanceDue: true },
@@ -38,6 +38,10 @@ export default async function DashboardPage() {
     prisma.invoice.aggregate({
       where: { businessId: business.id, ...overdueWhereClause() },
       _sum: { balanceDue: true },
+    }),
+    prisma.expense.aggregate({
+      where: { businessId: business.id },
+      _sum: { amount: true },
     }),
     prisma.invoice.findMany({
       where: { businessId: business.id },
@@ -56,6 +60,7 @@ export default async function DashboardPage() {
     { label: "Total Paid", icon: PiggyBank, value: totals._sum?.amountPaid ?? new Prisma.Decimal(0) },
     { label: "Outstanding", icon: FileClock, value: totals._sum?.balanceDue ?? new Prisma.Decimal(0) },
     { label: "Overdue", icon: TriangleAlert, value: overdueTotal._sum?.balanceDue ?? new Prisma.Decimal(0) },
+    { label: "Total Expenses", icon: Receipt, value: expenseTotal._sum?.amount ?? new Prisma.Decimal(0) },
   ];
 
   const months: { label: string; amount: number; year: number; month: number }[] = [];

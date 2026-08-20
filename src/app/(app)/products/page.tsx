@@ -36,6 +36,9 @@ export default async function ProductsPage({
     price: product.price.toFixed(2),
     taxRate: product.taxRate.toFixed(2),
     isActive: product.isActive,
+    trackInventory: product.trackInventory,
+    stockQuantity: product.stockQuantity.toFixed(2),
+    reorderLevel: product.reorderLevel.toFixed(2),
   }));
 
   return (
