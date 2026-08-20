@@ -1,12 +1,83 @@
-import { FileText } from "lucide-react";
-import { PagePlaceholder } from "@/components/layout/page-placeholder";
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { requireCurrentBusiness } from "@/lib/auth/current-user";
+import { prisma } from "@/lib/prisma";
+import { Button } from "@/components/ui/button";
+import { InvoicesView } from "@/components/invoices/invoices-view";
+import { getEffectiveInvoiceStatus, invoiceStatusWhere } from "@/lib/invoice-status";
+import type { InvoiceStatus } from "@/generated/prisma/enums";
+import type { CurrencyCode } from "@/lib/currencies";
 
-export default function InvoicesPage() {
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; status?: string; customerId?: string; from?: string; to?: string }>;
+}) {
+  const business = await requireCurrentBusiness();
+  const { q, status, customerId, from, to } = await searchParams;
+  const query = q?.trim() ?? "";
+  const statusFilter = (status as "ALL" | InvoiceStatus | undefined) ?? "ALL";
+
+  const [invoices, customers] = await Promise.all([
+    prisma.invoice.findMany({
+      where: {
+        businessId: business.id,
+        ...invoiceStatusWhere(statusFilter),
+        ...(customerId ? { customerId } : {}),
+        ...(from || to
+          ? {
+              issueDate: {
+                ...(from ? { gte: new Date(from) } : {}),
+                ...(to ? { lte: new Date(to) } : {}),
+              },
+            }
+          : {}),
+        ...(query
+          ? {
+              OR: [
+                { invoiceNumber: { contains: query, mode: "insensitive" } },
+                { customer: { name: { contains: query, mode: "insensitive" } } },
+              ],
+            }
+          : {}),
+      },
+      include: { customer: { select: { id: true, name: true } } },
+      orderBy: { issueDate: "desc" },
+    }),
+    prisma.customer.findMany({
+      where: { businessId: business.id },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  const rows = invoices.map((invoice) => ({
+    id: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    customerName: invoice.customer.name,
+    issueDate: invoice.issueDate.toISOString(),
+    dueDate: invoice.dueDate.toISOString(),
+    status: getEffectiveInvoiceStatus(invoice),
+    balanceDue: invoice.balanceDue.toFixed(2),
+    total: invoice.total.toFixed(2),
+  }));
+
   return (
-    <PagePlaceholder
-      icon={FileText}
-      title="Invoices"
-      description="Invoice creation, editing, and PDF export land in a later development phase."
-    />
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Button asChild>
+          <Link href="/invoices/new">
+            <Plus className="h-4 w-4" />
+            New invoice
+          </Link>
+        </Button>
+      </div>
+      <InvoicesView
+        invoices={rows}
+        customers={customers}
+        currency={business.currency as CurrencyCode}
+        filters={{ q: query, status: statusFilter, customerId: customerId ?? "", from: from ?? "", to: to ?? "" }}
+      />
+    </div>
   );
 }
