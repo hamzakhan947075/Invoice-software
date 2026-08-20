@@ -4,9 +4,22 @@ import { requireCurrentBusiness } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { InvoicesView } from "@/components/invoices/invoices-view";
-import { getEffectiveInvoiceStatus, invoiceStatusWhere } from "@/lib/invoice-status";
+import { INVOICE_STATUS_LABELS, getEffectiveInvoiceStatus, invoiceStatusWhere } from "@/lib/invoice-status";
 import type { InvoiceStatus } from "@/generated/prisma/enums";
 import type { CurrencyCode } from "@/lib/currencies";
+
+const VALID_STATUSES = new Set(Object.keys(INVOICE_STATUS_LABELS));
+
+function parseStatusFilter(value: string | undefined): "ALL" | InvoiceStatus {
+  if (value && VALID_STATUSES.has(value)) return value as InvoiceStatus;
+  return "ALL";
+}
+
+function parseDateParam(value: string | undefined): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
 
 export default async function InvoicesPage({
   searchParams,
@@ -16,7 +29,9 @@ export default async function InvoicesPage({
   const business = await requireCurrentBusiness();
   const { q, status, customerId, from, to } = await searchParams;
   const query = q?.trim() ?? "";
-  const statusFilter = (status as "ALL" | InvoiceStatus | undefined) ?? "ALL";
+  const statusFilter = parseStatusFilter(status);
+  const fromDate = parseDateParam(from);
+  const toDate = parseDateParam(to);
 
   const [invoices, customers] = await Promise.all([
     prisma.invoice.findMany({
@@ -24,11 +39,11 @@ export default async function InvoicesPage({
         businessId: business.id,
         ...invoiceStatusWhere(statusFilter),
         ...(customerId ? { customerId } : {}),
-        ...(from || to
+        ...(fromDate || toDate
           ? {
               issueDate: {
-                ...(from ? { gte: new Date(from) } : {}),
-                ...(to ? { lte: new Date(to) } : {}),
+                ...(fromDate ? { gte: fromDate } : {}),
+                ...(toDate ? { lte: toDate } : {}),
               },
             }
           : {}),

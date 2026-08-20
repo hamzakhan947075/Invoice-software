@@ -2,6 +2,7 @@
 
 import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { requireCurrentBusiness } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
@@ -15,6 +16,26 @@ const ALLOWED_LOGO_TYPES: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/webp": "webp",
 };
+
+/**
+ * The browser-supplied MIME type is attacker-controlled — verify the file's
+ * actual magic bytes match the claimed type rather than trusting it outright.
+ */
+function matchesDeclaredType(buffer: Buffer, mimeType: string): boolean {
+  if (mimeType === "image/png") {
+    return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  }
+  if (mimeType === "image/jpeg") {
+    return buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
+  }
+  if (mimeType === "image/webp") {
+    return (
+      buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+      buffer.subarray(8, 12).toString("ascii") === "WEBP"
+    );
+  }
+  return false;
+}
 
 export async function updateBusinessProfileAction(
   _prevState: BusinessProfileActionState,
@@ -46,12 +67,16 @@ export async function updateBusinessProfileAction(
       return { error: "Logo must be smaller than 2MB." };
     }
 
+    const buffer = Buffer.from(await logoFile.arrayBuffer());
+    if (!matchesDeclaredType(buffer, logoFile.type)) {
+      return { error: "That file doesn't look like a valid image." };
+    }
+
     const extension = ALLOWED_LOGO_TYPES[logoFile.type];
     const uploadDir = path.join(process.cwd(), "public", "uploads", "businesses", business.id);
     await mkdir(uploadDir, { recursive: true });
 
-    const filename = `logo-${Date.now()}.${extension}`;
-    const buffer = Buffer.from(await logoFile.arrayBuffer());
+    const filename = `logo-${randomUUID()}.${extension}`;
     await writeFile(path.join(uploadDir, filename), buffer);
 
     const previousLogoUrl = logoUrl;

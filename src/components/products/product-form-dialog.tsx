@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   createProductAction,
   updateProductAction,
@@ -56,8 +57,11 @@ export function ProductFormDialog({
   const [isActive, setIsActive] = useState(product?.isActive ?? true);
 
   useEffect(() => {
-    if (state?.success) onOpenChange(false);
-  }, [state, onOpenChange]);
+    if (state?.success) {
+      toast.success(isEdit ? "Product updated." : "Product added.");
+      onOpenChange(false);
+    }
+  }, [state, isEdit, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

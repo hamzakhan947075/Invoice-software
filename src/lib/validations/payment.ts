@@ -21,7 +21,7 @@ export const PAYMENT_METHOD_LABELS: Record<(typeof PAYMENT_METHODS)[number], str
 };
 
 export const paymentSchema = z.object({
-  amount: z.coerce
+  amount: z
     .number({ error: "Amount must be a number." })
     .positive("Amount must be greater than zero."),
   paymentDate: z.string().trim().min(1, "Payment date is required."),

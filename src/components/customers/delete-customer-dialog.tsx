@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect } from "react";
+import { toast } from "sonner";
 import {
   deleteCustomerAction,
   type DeleteCustomerActionState,
@@ -36,7 +37,10 @@ export function DeleteCustomerDialog({
   );
 
   useEffect(() => {
-    if (state?.success) onOpenChange(false);
+    if (state?.success) {
+      toast.success("Customer deleted.");
+      onOpenChange(false);
+    }
   }, [state, onOpenChange]);
 
   return (

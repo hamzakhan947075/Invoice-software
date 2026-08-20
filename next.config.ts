@@ -1,7 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  experimental: {
+    serverActions: {
+      // Business logo uploads are capped at 2MB (see settings/actions.ts);
+      // this must be >= that, with headroom for multipart overhead.
+      bodySizeLimit: "3mb",
+    },
+  },
 };
 
 export default nextConfig;

@@ -13,6 +13,11 @@ function getSecret(): string {
       "AUTH_SECRET environment variable is not set. Add it to your .env file."
     );
   }
+  if (secret.length < 32) {
+    throw new Error(
+      "AUTH_SECRET is too short (needs 32+ characters) — a weak secret makes session cookies forgeable."
+    );
+  }
   return secret;
 }
 
@@ -31,7 +36,9 @@ export function createSessionToken(userId: string): string {
 }
 
 export function verifySessionToken(token: string): { userId: string } | null {
-  const [encodedPayload, signature] = token.split(".");
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [encodedPayload, signature] = parts;
   if (!encodedPayload || !signature) return null;
 
   const expectedSignature = sign(encodedPayload);

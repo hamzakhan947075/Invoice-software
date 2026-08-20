@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect } from "react";
+import { toast } from "sonner";
 import {
   createCustomerAction,
   updateCustomerAction,
@@ -44,8 +45,11 @@ export function CustomerFormDialog({
   );
 
   useEffect(() => {
-    if (state?.success) onOpenChange(false);
-  }, [state, onOpenChange]);
+    if (state?.success) {
+      toast.success(isEdit ? "Customer updated." : "Customer added.");
+      onOpenChange(false);
+    }
+  }, [state, isEdit, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

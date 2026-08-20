@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, Mail, MapPin, Phone } from "lucide-react";
+import { ArrowLeft, Download, FileText, Mail, MapPin, Phone, Wallet } from "lucide-react";
 import { requireCurrentBusiness } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { formatMoney } from "@/lib/format";
 import type { CurrencyCode } from "@/lib/currencies";
-import { INVOICE_STATUS_LABELS } from "@/lib/invoice-status";
+import { getEffectiveInvoiceStatus } from "@/lib/invoice-status";
+import { InvoiceStatusBadge } from "@/components/invoices/invoice-status-badge";
+import { PAYMENT_METHOD_LABELS } from "@/lib/validations/payment";
 
 export default async function CustomerDetailPage({
   params,
@@ -29,6 +31,7 @@ export default async function CustomerDetailPage({
           id: true,
           invoiceNumber: true,
           issueDate: true,
+          dueDate: true,
           status: true,
           total: true,
           amountPaid: true,
@@ -39,6 +42,12 @@ export default async function CustomerDetailPage({
   });
 
   if (!customer) notFound();
+
+  const payments = await prisma.payment.findMany({
+    where: { businessId: business.id, invoice: { customerId: id } },
+    include: { invoice: { select: { invoiceNumber: true } } },
+    orderBy: { paymentDate: "desc" },
+  });
 
   const currency = business.currency as CurrencyCode;
   const totals = customer.invoices.reduce(
@@ -56,7 +65,7 @@ export default async function CustomerDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="flex items-center justify-between">
         <Link
           href="/customers"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -64,6 +73,12 @@ export default async function CustomerDetailPage({
           <ArrowLeft className="h-4 w-4" />
           Back to customers
         </Link>
+        <Button variant="outline" asChild>
+          <a href={`/customers/${customer.id}/statement/pdf`} download={`${customer.name}-statement.pdf`}>
+            <Download className="h-4 w-4" />
+            Download Statement PDF
+          </a>
+        </Button>
       </div>
 
       <div className="flex flex-col gap-6 lg:flex-row">
@@ -146,13 +161,45 @@ export default async function CustomerDetailPage({
               {customer.invoices.map((invoice) => (
                 <div key={invoice.id} className="flex items-center justify-between py-3 text-sm">
                   <div className="flex flex-col">
-                    <span className="font-medium">{invoice.invoiceNumber}</span>
+                    <Link href={`/invoices/${invoice.id}`} className="font-medium hover:underline">
+                      {invoice.invoiceNumber}
+                    </Link>
                     <span className="text-muted-foreground">
                       {invoice.issueDate.toLocaleDateString()}
                     </span>
                   </div>
-                  <Badge variant="outline">{INVOICE_STATUS_LABELS[invoice.status]}</Badge>
+                  <InvoiceStatusBadge status={getEffectiveInvoiceStatus(invoice)} />
                   <span className="font-medium">{formatMoney(invoice.total.toFixed(2), currency)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {payments.length === 0 ? (
+            <EmptyState
+              icon={Wallet}
+              title="No payments yet"
+              description="Payments recorded against this customer's invoices will appear here."
+            />
+          ) : (
+            <div className="flex flex-col divide-y divide-border">
+              {payments.map((payment) => (
+                <div key={payment.id} className="flex items-center justify-between py-3 text-sm">
+                  <div className="flex flex-col">
+                    <span className="font-medium">{payment.paymentDate.toLocaleDateString()}</span>
+                    <span className="text-muted-foreground">
+                      {payment.invoice.invoiceNumber} · {PAYMENT_METHOD_LABELS[payment.paymentMethod]}
+                      {payment.reference ? ` · ${payment.reference}` : ""}
+                    </span>
+                  </div>
+                  <span className="font-medium">{formatMoney(payment.amount.toFixed(2), currency)}</span>
                 </div>
               ))}
             </div>

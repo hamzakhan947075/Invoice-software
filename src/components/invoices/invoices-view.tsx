@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { FileText } from "lucide-react";
+import { Eye, FileText, Pencil } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/shared/search-input";
 import { EmptyState } from "@/components/shared/empty-state";
 import { formatMoney } from "@/lib/format";
@@ -115,7 +116,7 @@ export function InvoicesView({
         </div>
       </div>
 
-      <div className="rounded-lg border border-border">
+      <div className="overflow-x-auto rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -124,12 +125,13 @@ export function InvoicesView({
               <TableHead>Date</TableHead>
               <TableHead className="text-right">Amount</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="w-0">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {invoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="p-0">
+                <TableCell colSpan={6} className="p-0">
                   <EmptyState
                     icon={FileText}
                     title={hasFilters ? "No invoices match your filters" : "No invoices yet"}
@@ -156,6 +158,32 @@ export function InvoicesView({
                   <TableCell className="text-right">{formatMoney(invoice.total, currency)}</TableCell>
                   <TableCell>
                     <InvoiceStatusBadge status={invoice.status} />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="icon-sm" asChild>
+                        <Link href={`/invoices/${invoice.id}`} aria-label="View invoice">
+                          <Eye className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                      <Button variant="ghost" size="icon-sm" asChild>
+                        <a
+                          href={`/invoices/${invoice.id}/pdf?disposition=inline`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="View PDF"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </a>
+                      </Button>
+                      {invoice.status === "DRAFT" && (
+                        <Button variant="ghost" size="icon-sm" asChild>
+                          <Link href={`/invoices/${invoice.id}/edit`} aria-label="Edit invoice">
+                            <Pencil className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

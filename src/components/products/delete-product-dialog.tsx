@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect } from "react";
+import { toast } from "sonner";
 import { deleteProductAction, type DeleteProductActionState } from "@/app/(app)/products/actions";
 import {
   AlertDialog,
@@ -30,7 +31,10 @@ export function DeleteProductDialog({
   );
 
   useEffect(() => {
-    if (state?.success) onOpenChange(false);
+    if (state?.success) {
+      toast.success("Product deleted.");
+      onOpenChange(false);
+    }
   }, [state, onOpenChange]);
 
   return (

@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Image from "next/image";
 import { Building2 } from "lucide-react";
+import { toast } from "sonner";
 import {
   updateBusinessProfileAction,
   type BusinessProfileActionState,
@@ -35,6 +36,10 @@ export function BusinessProfileForm({ business }: { business: BusinessProfile })
     undefined
   );
   const [logoPreview, setLogoPreview] = useState<string | null>(business.logoUrl);
+
+  useEffect(() => {
+    if (state?.success) toast.success("Business profile updated.");
+  }, [state]);
 
   return (
     <form action={formAction}>
@@ -109,9 +114,6 @@ export function BusinessProfileForm({ business }: { business: BusinessProfile })
         </Field>
 
         {state?.error && <FieldError>{state.error}</FieldError>}
-        {state?.success && (
-          <p className="text-sm text-primary">Business profile updated.</p>
-        )}
 
         <Button type="submit" disabled={pending} className="w-fit">
           {pending ? "Saving…" : "Save changes"}

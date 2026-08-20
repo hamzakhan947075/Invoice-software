@@ -237,7 +237,9 @@ async function main() {
       invoiceNumber: "INV-2026-0003",
       issueDate: new Date("2026-06-20"),
       dueDate: new Date("2026-07-05"),
-      status: "OVERDUE",
+      // Stays SENT — "Overdue" is a derived display status (see src/lib/invoice-status.ts),
+      // never written to the database, so a past due date + open balance is what makes it overdue.
+      status: "SENT",
       currency: "PKR",
       subtotal: line4.net,
       discount: 0,

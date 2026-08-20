@@ -4,12 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireCurrentBusiness } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@/generated/prisma/client";
 import { invoiceSchema, type InvoiceInput } from "@/lib/validations/invoice";
 import { calculateInvoiceTotals, calculateLineItem } from "@/lib/invoice-calculations";
 import { generateInvoiceNumber } from "@/lib/invoice-number";
 
 export type InvoiceActionResult = { error?: string; invoiceId?: string };
+
+class InvoiceActionError extends Error {}
 
 async function resolveItemProductIds(businessId: string, items: InvoiceInput["items"]) {
   const productIds = [...new Set(items.map((item) => item.productId).filter((id): id is string => Boolean(id)))];
@@ -120,38 +121,53 @@ export async function updateInvoiceAction(
   const ownedProductIds = await resolveItemProductIds(business.id, data.items);
   const totals = calculateInvoiceTotals(data.items);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.invoiceItem.deleteMany({ where: { invoiceId } });
-    await tx.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        customerId: data.customerId,
-        issueDate: new Date(data.issueDate),
-        dueDate: new Date(data.dueDate),
-        currency: data.currency,
-        subtotal: totals.subtotal,
-        discount: totals.discount,
-        tax: totals.tax,
-        total: totals.total,
-        balanceDue: totals.total,
-        notes: data.notes || null,
-        items: {
-          create: data.items.map((item) => {
-            const { lineTotal } = calculateLineItem(item);
-            return {
-              productId: item.productId && ownedProductIds.has(item.productId) ? item.productId : null,
-              description: item.description,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              discount: item.discount,
-              taxRate: item.taxRate,
-              lineTotal,
-            };
-          }),
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Re-verify DRAFT status and tenant ownership atomically with the write —
+      // the earlier check above is only a fast-path UX guard, not the source of
+      // truth, since the invoice could be marked Sent by another request in between.
+      const { count } = await tx.invoice.updateMany({
+        where: { id: invoiceId, businessId: business.id, status: "DRAFT" },
+        data: {
+          customerId: data.customerId,
+          issueDate: new Date(data.issueDate),
+          dueDate: new Date(data.dueDate),
+          currency: data.currency,
+          subtotal: totals.subtotal,
+          discount: totals.discount,
+          tax: totals.tax,
+          total: totals.total,
+          balanceDue: totals.total,
+          notes: data.notes || null,
         },
-      },
+      });
+      if (count === 0) {
+        throw new InvoiceActionError("Only draft invoices can be edited.");
+      }
+
+      await tx.invoiceItem.deleteMany({ where: { invoiceId } });
+      await tx.invoiceItem.createMany({
+        data: data.items.map((item) => {
+          const { lineTotal } = calculateLineItem(item);
+          return {
+            invoiceId,
+            productId: item.productId && ownedProductIds.has(item.productId) ? item.productId : null,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            discount: item.discount,
+            taxRate: item.taxRate,
+            lineTotal,
+          };
+        }),
+      });
     });
-  });
+  } catch (error) {
+    if (error instanceof InvoiceActionError) {
+      return { error: error.message };
+    }
+    throw error;
+  }
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);

@@ -5,16 +5,16 @@ export const invoiceItemSchema = z
   .object({
     productId: z.string().trim().optional().or(z.literal("")),
     description: z.string().trim().min(1, "Description is required."),
-    quantity: z.coerce
+    quantity: z
       .number({ error: "Quantity must be a number." })
       .positive("Quantity must be greater than zero."),
-    unitPrice: z.coerce
+    unitPrice: z
       .number({ error: "Unit price must be a number." })
       .nonnegative("Unit price can't be negative."),
-    discount: z.coerce
+    discount: z
       .number({ error: "Discount must be a number." })
       .nonnegative("Discount can't be negative."),
-    taxRate: z.coerce
+    taxRate: z
       .number({ error: "Tax rate must be a number." })
       .min(0, "Tax rate can't be negative.")
       .max(100, "Tax rate can't exceed 100%."),

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useFieldArray, useForm, useWatch, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
@@ -82,7 +83,9 @@ export function InvoiceForm({
           dueDate: invoice.dueDate,
           currency: invoice.currency as CurrencyCode,
           notes: invoice.notes,
-          items: invoice.items,
+          // useFieldArray needs a stable `id` per row on the initial render, or its
+          // auto-generated id differs between the server render and client hydration.
+          items: invoice.items.map((item, index) => ({ ...item, id: String(index) })),
         }
       : {
           customerId: "",
@@ -90,7 +93,7 @@ export function InvoiceForm({
           dueDate: addDaysIso(14),
           currency: defaultCurrency,
           notes: "",
-          items: [emptyItem()],
+          items: [{ ...emptyItem(), id: "0" }],
         },
   });
 
@@ -128,6 +131,7 @@ export function InvoiceForm({
       setServerError(result.error);
       return;
     }
+    toast.success(isEdit ? "Invoice updated." : "Invoice created.");
     router.push(`/invoices/${result.invoiceId}`);
   }
 
@@ -211,12 +215,12 @@ export function InvoiceForm({
             <div key={field.id} className="rounded-lg border border-border p-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
                 <Field className="sm:col-span-2">
-                  <FieldLabel htmlFor={`product-${field.id}`}>Product/Service</FieldLabel>
+                  <FieldLabel htmlFor={`product-${index}`}>Product/Service</FieldLabel>
                   <Select
-                    value={watchedItems[index]?.productId || undefined}
+                    value={watchedItems[index]?.productId ?? ""}
                     onValueChange={(value) => applyProduct(index, value)}
                   >
-                    <SelectTrigger id={`product-${field.id}`} className="w-full">
+                    <SelectTrigger id={`product-${index}`} className="w-full">
                       <SelectValue placeholder="Custom item" />
                     </SelectTrigger>
                     <SelectContent>
@@ -230,9 +234,9 @@ export function InvoiceForm({
                 </Field>
 
                 <Field className="sm:col-span-4">
-                  <FieldLabel htmlFor={`description-${field.id}`}>Description</FieldLabel>
+                  <FieldLabel htmlFor={`description-${index}`}>Description</FieldLabel>
                   <Input
-                    id={`description-${field.id}`}
+                    id={`description-${index}`}
                     {...register(`items.${index}.description`)}
                   />
                   {errors.items?.[index]?.description && (
@@ -241,47 +245,47 @@ export function InvoiceForm({
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor={`quantity-${field.id}`}>Quantity</FieldLabel>
+                  <FieldLabel htmlFor={`quantity-${index}`}>Quantity</FieldLabel>
                   <Input
-                    id={`quantity-${field.id}`}
+                    id={`quantity-${index}`}
                     type="number"
                     step="0.01"
                     min="0"
-                    {...register(`items.${index}.quantity`)}
+                    {...register(`items.${index}.quantity`, { valueAsNumber: true })}
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor={`unitPrice-${field.id}`}>Unit price</FieldLabel>
+                  <FieldLabel htmlFor={`unitPrice-${index}`}>Unit price</FieldLabel>
                   <Input
-                    id={`unitPrice-${field.id}`}
+                    id={`unitPrice-${index}`}
                     type="number"
                     step="0.01"
                     min="0"
-                    {...register(`items.${index}.unitPrice`)}
+                    {...register(`items.${index}.unitPrice`, { valueAsNumber: true })}
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor={`discount-${field.id}`}>Discount</FieldLabel>
+                  <FieldLabel htmlFor={`discount-${index}`}>Discount</FieldLabel>
                   <Input
-                    id={`discount-${field.id}`}
+                    id={`discount-${index}`}
                     type="number"
                     step="0.01"
                     min="0"
-                    {...register(`items.${index}.discount`)}
+                    {...register(`items.${index}.discount`, { valueAsNumber: true })}
                   />
                   {errors.items?.[index]?.discount && (
                     <FieldError>{errors.items[index]?.discount?.message}</FieldError>
                   )}
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor={`taxRate-${field.id}`}>Tax rate (%)</FieldLabel>
+                  <FieldLabel htmlFor={`taxRate-${index}`}>Tax rate (%)</FieldLabel>
                   <Input
-                    id={`taxRate-${field.id}`}
+                    id={`taxRate-${index}`}
                     type="number"
                     step="0.01"
                     min="0"
                     max="100"
-                    {...register(`items.${index}.taxRate`)}
+                    {...register(`items.${index}.taxRate`, { valueAsNumber: true })}
                   />
                 </Field>
 
