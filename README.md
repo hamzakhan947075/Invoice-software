@@ -143,3 +143,5 @@ This project is being built incrementally. Each phase produces a working applica
 
 - `npm audit` reports a high-severity advisory in `deepmerge-ts`, a transitive dependency of Prisma's config loader (`@prisma/config`). This affects Prisma's own dev-time config merging (a stack-exhaustion DoS on deeply recursive input we don't control) and has no runtime/production exposure. Re-check on the next Prisma patch release.
 - The local `.env` in this environment points at a `prisma dev` (local Prisma-managed Postgres) instance for development. Point it at your own PostgreSQL server (or run `npx prisma dev`) as described above.
+#   I n v o i c e - s o f t w a r e  
+ 
